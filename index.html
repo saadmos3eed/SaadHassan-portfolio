@@ -489,10 +489,18 @@
   .records-head h2{ font-family:var(--font-display); font-weight:700; font-size:24px; margin:0 0 8px; }
   .records-head p{ color:var(--ink-soft); font-size:14px; margin:0; }
 
+  .tabbar-wrap{ position:relative; }
   .tabbar{
     display:flex; gap:6px; flex-wrap:wrap; padding:6px; background:var(--surface-2);
     border-radius:14px; margin-bottom:16px;
   }
+  .tabbar-hint{
+    display:none; align-items:center; gap:4px;
+    font-family:var(--font-mono); font-size:10.5px; color:var(--ink-faint);
+    margin:-10px 0 16px; padding-left:2px;
+  }
+  .tabbar-hint svg{ width:12px; height:12px; animation:hintNudge 1.6s ease-in-out infinite; }
+  @keyframes hintNudge{ 0%,100%{ transform:translateX(0); } 50%{ transform:translateX(4px); } }
   .tab{
     display:inline-flex; align-items:center; gap:8px;
     font-family:var(--font-body); font-weight:600; font-size:13px;
@@ -508,7 +516,20 @@
   .tab:hover:not(.active){ color:var(--ink); }
   .tab.active{ background:var(--surface); color:var(--ink); box-shadow:var(--shadow); }
   .tab.active .tab-count{ background:var(--accent-soft); color:var(--accent-ink); }
-  @media (max-width:700px){ .tabbar{ flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; } .tab{ flex:none; } }
+  @media (max-width:700px){
+    .tabbar{
+      flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch;
+      scroll-snap-type:x proximity;
+      -webkit-mask-image:linear-gradient(90deg, #000 88%, transparent 100%);
+              mask-image:linear-gradient(90deg, #000 88%, transparent 100%);
+    }
+    .tabbar.at-end{
+      -webkit-mask-image:none; mask-image:none;
+    }
+    .tab{ flex:none; scroll-snap-align:start; }
+    .tabbar-hint{ display:flex; }
+    .tabbar-hint.hidden{ opacity:0; pointer-events:none; }
+  }
 
   .tab-note{ color:var(--ink-soft); font-size:14px; max-width:62ch; margin:0 0 22px; }
 
@@ -864,7 +885,10 @@
     <h2>The detailed record</h2>
     <p>Pick a category, then open a card for the full Problem → Action → Method → Result → Impact write-up, its source citation, and any linked report.</p>
   </div>
-  <div class="tabbar" id="tabbar" role="tablist"><!-- filled by JS --></div>
+  <div class="tabbar-wrap">
+    <div class="tabbar" id="tabbar" role="tablist"><!-- filled by JS --></div>
+  </div>
+  <p class="tabbar-hint" id="tabbarHint">Swipe to see all categories <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></p>
   <p class="tab-note" id="tabnote"></p>
   <div class="tabpanel" id="tabpanel"><!-- filled by JS --></div>
 </section>
@@ -1741,6 +1765,23 @@ function renderTabPanel(){
   revealOnScroll();
 }
 
+function wireTabbarScrollHint(){
+  const bar = document.getElementById("tabbar");
+  const hint = document.getElementById("tabbarHint");
+  if(!bar || !hint) return;
+  hint.textContent = `Swipe to see all ${DATA.length} categories`;
+  const svg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`;
+  hint.insertAdjacentHTML("beforeend", " " + svg);
+  function update(){
+    const atEnd = bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 4;
+    bar.classList.toggle("at-end", atEnd);
+    hint.classList.toggle("hidden", atEnd);
+  }
+  bar.addEventListener("scroll", update, { passive:true });
+  window.addEventListener("resize", update);
+  update();
+}
+
 function wireTabs(){
   document.getElementById("tabbar").addEventListener("click", (e)=>{
     const btn = e.target.closest(".tab");
@@ -1838,7 +1879,17 @@ function wireContactPopover(){
     let left = rect.left + rect.width/2 - width/2;
     left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
     popover.style.left = left + "px";
-    popover.style.top = (rect.bottom + 10) + "px";
+    // Flip above the button when there isn't enough room below — otherwise,
+    // on shorter phone screens, the popover opens entirely off-screen and
+    // tapping "Get in touch" looks like it does nothing.
+    const height = popover.offsetHeight || 200;
+    const spaceBelow = window.innerHeight - rect.bottom - 10;
+    if (spaceBelow < height && rect.top - height - 10 > margin) {
+      popover.style.top = (rect.top - height - 10) + "px";
+    } else {
+      const top = Math.min(rect.bottom + 10, window.innerHeight - height - margin);
+      popover.style.top = Math.max(margin, top) + "px";
+    }
   }
   function open(){
     position();
@@ -1947,6 +1998,7 @@ renderReports();
 renderTabs();
 renderTabPanel();
 wireTabs();
+wireTabbarScrollHint();
 wireReportModal();
 wireContactPopover();
 wireScrollProgress();
