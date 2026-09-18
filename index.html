@@ -2122,7 +2122,25 @@ function openReportModal(href, title){
   frame = resetReportFrame();
 
   if(loadReportInto(frame, href)){ wait.classList.remove("on"); return; }
-  if(!window.REPORT_SOURCES){ wait.classList.remove("on"); frame.src = href + "?v=" + REPORT_VERSION; return; }
+  if(!window.REPORT_SOURCES){
+    // The report files may sit in a reports/ folder OR next to index.html in
+    // the repo root, depending on how they were uploaded. Probe both instead
+    // of assuming one layout and failing silently on a 404.
+    wait.classList.add("on");
+    const bare = href.replace(/^reports\//, "");
+    const candidates = [href, bare, "reports/" + bare];
+    (async () => {
+      for(const c of candidates){
+        try{
+          const res = await fetch(c + "?v=" + REPORT_VERSION, { method:"HEAD" });
+          if(res.ok){ wait.classList.remove("on"); frame.src = c + "?v=" + REPORT_VERSION; return; }
+        }catch(e){}
+      }
+      wait.innerHTML = "";
+      wait.textContent = "Could not find " + bare + " \u2014 upload it next to index.html";
+    })();
+    return;
+  }
 
   // The report data lives at the very end of this file so the page itself can
   // render first. If a visitor clicks before that tail has finished streaming,
